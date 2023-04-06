@@ -2,8 +2,8 @@ import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { FC, useEffect, useState } from 'react';
 
 import { Program, AnchorProvider, web3, utils, BN } from '@project-serum/anchor';
-import idl from './solanapdas.json';
-import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
+import idl from './solitor.json';
+import { PublicKey } from '@solana/web3.js';
 
 const idlString = JSON.stringify(idl);
 const idlObject = JSON.parse(idlString);
@@ -19,9 +19,9 @@ export const Bank: FC = () => {
     const anchorProvider = new AnchorProvider(connection, wallet, AnchorProvider.defaultOptions()); //getProvider();
     const program = new Program(idlObject, programID, anchorProvider);
 
-    const [ otherAddress, setOtherAddress ] = useState<string>();
-    const [ assetHash, setAssetHash ] = useState<string>();
-    const [ assetStatus, setAssetStatus ] = useState<string>();
+    const [ otherAddress, setOtherAddress ] = useState<string>('');
+    const [ assetHash, setAssetHash ] = useState<string>('');
+    const [ assetStatus, setAssetStatus ] = useState<string>('');
     
     const [ hasPDA, setHasPDA ] = useState<boolean>(false);
     const [ isPDAOwner, setPDAOwner ] = useState<boolean>(false);
@@ -39,31 +39,27 @@ export const Bank: FC = () => {
 
 
     const generatePDAddress = async () => {
-        try {
-            const [ audits ] = await PublicKey.findProgramAddressSync([ // seeds
-                utils.bytes.utf8.encode("sol-audit-trail"), 
-                anchorProvider.wallet.publicKey.toBuffer(),
-                new Buffer(otherAddress)
-            ], program.programId);
-            setHasPDA(true);
-            return audits;
-        } catch(err) {
-            console.log('[generatePDAddress] err: ', err);
-            setHasPDA(false);
-            return null;
-        }
+        const [ audits ] = await PublicKey.findProgramAddressSync([ // seeds
+            utils.bytes.utf8.encode("sol-audit-trail"), 
+            anchorProvider.wallet.publicKey.toBuffer(),
+            new Buffer(otherAddress)
+        ], program.programId);
+        return audits;
     };
 
     // function to check if owner or auditor
     const isOwner = async (): Promise<boolean> => {
         try {
-        const audit = await generatePDAddress();
+            const audit = await generatePDAddress();
 
-        const auditPDAccount = await program.account.solAudit.fetch(audit);
-        console.log('auditPDAccount.owner: ', auditPDAccount); //owner
-        return anchorProvider.wallet.publicKey.toString() === auditPDAccount.toString(); //owner
+            console.log('[isOwner] program.account: ', program.account); //owner
+            const auditPDAccount = await program.account.solAudit.fetch(audit);
+            setHasPDA(true);
+            console.log('auditPDAccount.owner: ', auditPDAccount); //owner
+            return anchorProvider.wallet.publicKey.toString() === auditPDAccount.toString(); //owner
         } catch(err) {
             console.error(err);
+            setHasPDA(false);
             return false;
         }
     };
@@ -134,14 +130,13 @@ export const Bank: FC = () => {
             <div className="flex flex-col justify-center">
                 <>
                 <div className="relative group items-center">
-                    <div className="flex flex-row justify-center">
-                        {isOwner && <div className="relative group items-center" style={{ padding: 8 }}>
-                                <h6>Asset Status:</h6>
-                                <input type="text"
-                                    value={otherAddress}
-                                    onChange={(event) => setOtherAddress(event.target.value)} />
-                            </div>
-                        }
+                    {!hasPDA &&  <div className="flex flex-row justify-center">
+                        <div className="relative group items-center" style={{ padding: 8 }}>
+                            <h6>{isPDAOwner ? 'Auditor' : 'Client'} Address:</h6>
+                            <input type="text"
+                                value={otherAddress}
+                                onChange={(event) => setOtherAddress(event.target.value)} />
+                        </div>
                         
                         <div className="relative group items-center" style={{ padding: 8}}>
                             <button
@@ -153,7 +148,8 @@ export const Bank: FC = () => {
                             </button>
                         </div>
                     </div>                    
-                    
+                    }
+
                     <div className="flex flex-row justify-center">
 
                         <div className="relative group items-center" style={{ padding: 8}}>
@@ -163,7 +159,7 @@ export const Bank: FC = () => {
                                 onChange={(e) => setAssetHash(e.target.value)} />
                         </div>
 
-                        {isOwner && <div className="relative group items-center" style={{ padding: 8}}>
+                        {isPDAOwner && <div className="relative group items-center" style={{ padding: 8}}>
                                 <h6>Asset Status:</h6>
                                 <input type="text"
                                     value={assetStatus}
@@ -176,9 +172,9 @@ export const Bank: FC = () => {
                     <div className="relative group items-center">
                         <button
                             className="group w-60 m-2 btn animate-pulse bg-gradient-to-br from-indigo-500 to-fuchsia-500 hover:from-white hover:to-purple-300 text-black"
-                            onClick={isOwner ? addAsset : setAuditStatus}>
+                            onClick={isPDAOwner ? addAsset : setAuditStatus}>
                             <span className="block group-disabled:hidden" > 
-                                {isOwner ? 'Add Asset' : 'Log Asset'}
+                                {isPDAOwner ? 'Add Asset' : 'Log Asset'}
                             </span>
                         </button>
                     </div>
