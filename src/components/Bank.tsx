@@ -124,30 +124,10 @@ export const Bank: FC = () => {
     };
 
     // function to get asset and status
+    /*
     const getAssetLogs = async () => {
-
     };
-
-    const getBanks = async () => {
-        try {
-            const anchorProvider = getProvider();
-            const program = new Program(idlObject, programID, anchorProvider);
-
-            Promise.all((await connection.getProgramAccounts(programID)).map(async bank => {
-                console.log('[promise all map] bank: ', bank);
-                return {
-                    ...(await program.account.bank.fetch(bank.pubkey)),
-                    pubkey: bank.pubkey
-                }
-            }
-            )).then(banks => {
-                console.log('[then] banks: ', banks);
-                setBanks(banks);
-            });
-        } catch(err) {
-            console.log('error fetching banks | err: ', err);
-        }
-    };
+    */
 
     return (
         <>
