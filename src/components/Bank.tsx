@@ -1,5 +1,5 @@
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-import { FC, useState } from 'react';
+import { FC, useEffect, useState } from 'react';
 
 import { Program, AnchorProvider, web3, utils, BN } from '@project-serum/anchor';
 import idl from './solanapdas.json';
@@ -12,108 +12,120 @@ const programID = new PublicKey(idl.metadata.address);
 
 export const Bank: FC = () => {
     const wallet = useWallet();
+    
     const { connection } = useConnection();
-    const [ banks, setBanks ] = useState([]);
 
     const getProvider = () => new AnchorProvider(connection, wallet, AnchorProvider.defaultOptions());
+    const anchorProvider = new AnchorProvider(connection, wallet, AnchorProvider.defaultOptions()); //getProvider();
+    const program = new Program(idlObject, programID, anchorProvider);
 
-    const createBank = async () => {
+    const [ otherAddress, setOtherAddress ] = useState<string>();
+    const [ assetHash, setAssetHash ] = useState<string>();
+    const [ assetStatus, setAssetStatus ] = useState<string>();
+    
+    const [ hasPDA, setHasPDA ] = useState<boolean>(false);
+    const [ isPDAOwner, setPDAOwner ] = useState<boolean>(false);
+
+    const [ assetLogs, setAssetLogs ] = useState([]);
+
+    useEffect(() => {
+        setOwner();
+    }, [ program ]);
+
+    const setOwner = async () => {
+        const owner = await isOwner();
+        setPDAOwner(owner);
+    };
+
+
+    const generatePDAddress = async () => {
         try {
-            const anchorProvider = getProvider();
-            const program = new Program(idlObject, programID, anchorProvider);
-            
-            // need to create a new PDA for the bank
-            const [ bank ] = await PublicKey.findProgramAddressSync([ // seeds
-                utils.bytes.utf8.encode("bankaccount"), 
-                anchorProvider.wallet.publicKey.toBuffer()
-            ], program.programId); // program id for smart contract
+            const [ audits ] = await PublicKey.findProgramAddressSync([ // seeds
+                utils.bytes.utf8.encode("sol-audit-trail"), 
+                anchorProvider.wallet.publicKey.toBuffer(),
+                new Buffer(otherAddress)
+            ], program.programId);
+            setHasPDA(true);
+            return audits;
+        } catch(err) {
+            console.log('[generatePDAddress] err: ', err);
+            setHasPDA(false);
+            return null;
+        }
+    };
 
+    // function to check if owner or auditor
+    const isOwner = async (): Promise<boolean> => {
+        try {
+        const audit = await generatePDAddress();
 
-            console.log('idlObject: ', idlObject.toString());
-            console.log('programID: ', programID.toString());
-            console.log('anchorProvider: ', anchorProvider.toString());
-            console.log('program: ', program.toString());
-            console.log('utils.bytes.utf8.encode("bankaccount"): ', utils.bytes.utf8.encode("bankaccount").toString());
-            console.log('anchorProvider.wallet.publicKey: ', anchorProvider.wallet.publicKey.toString());
-            console.log('program.programId: ', program.programId.toString());
-            console.log('bank: ', bank.toString());
-            console.log('user: ', anchorProvider.wallet.publicKey.toString());
-            console.log('systemProgram: ', web3.SystemProgram.programId.toString());
+        const auditPDAccount = await program.account.solAudit.fetch(audit);
+        console.log('auditPDAccount.owner: ', auditPDAccount.owner);
+        return anchorProvider.wallet.publicKey.toString() === auditPDAccount.owner.toString();
+        } catch(err) {
+            console.error(err);
+            return false;
+        }
+    };
 
-            await program.rpc.create("WsoS Bank", {
-                accounts: {
-                    bank,
-                    user: anchorProvider.wallet.publicKey,
-                    systemProgram: web3.SystemProgram.programId
-                }
-            });
+    // function to create pda
+    const createAssetLog = async () => {
+        try {            
+            // need to create a new PDA for the asset logs
+            const audit = await generatePDAddress();
 
-            console.log('Wow! new bank created @ ' + bank.toString());
+            const tx = await program.methods.create().accounts({
+                audit: audit,
+                user: anchorProvider.wallet.publicKey,
+                auditor: new PublicKey(otherAddress),
+                systemProgram: web3.SystemProgram.programId,
+              }).rpc();
 
+            console.log('Wow! new asset pda created: ' + tx.toString());
         } catch(err) {
             console.log('error creating bank | err: ', err);
         }
     };
 
-    const depositInBank = async (PDABankPublicKey: string) => {
-        try {
-            const anchorProvider = getProvider();
-            const program = new Program(idlObject, programID, anchorProvider);
-            
-            // need to create a new PDA for the bank
-            const [ bank ] = await PublicKey.findProgramAddressSync([ // seeds
-                utils.bytes.utf8.encode("bankaccount"), 
-                anchorProvider.wallet.publicKey.toBuffer()
-            ], program.programId); // program id for smart contract
+    // function to add asset to blockchain
+    const addAsset = async () => {
+        try {            
+            // need to create a new PDA for the asset logs
+            const audit = await generatePDAddress();
 
+            const tx = await program.methods.addAudit(assetHash).accounts({
+                audit: audit,
+                user: anchorProvider.wallet.publicKey,
+                systemProgram: web3.SystemProgram.programId,
+              }).rpc();
 
-            await program.rpc.deposit(new BN(0.12 * LAMPORTS_PER_SOL), {
-                accounts: {
-                    bank: PDABankPublicKey,
-                    user: anchorProvider.wallet.publicKey,
-                    systemProgram: web3.SystemProgram.programId
-                }
-            });
-
-            console.log('Deposited 0.12 SOL into bank @ ', PDABankPublicKey);
-
+            console.log('Wow! new asset pda created: ' + tx.toString());
         } catch(err) {
-            console.log('error depositing into bank | err: ', err);
+            console.log('error creating bank | err: ', err);
         }
     };
 
-    const withdrawFromBank = async (PDABankPublicKey: string) => {
-        try {
-            const anchorProvider = getProvider();
-            const program = new Program(idlObject, programID, anchorProvider);
-            
-            // need to create a new PDA for the bank
-            const [ bank ] = await PublicKey.findProgramAddressSync([ // seeds
-                utils.bytes.utf8.encode("bankaccount"), 
-                anchorProvider.wallet.publicKey.toBuffer()
-            ], program.programId); // program id for smart contract
+    // function for auditor to set status of asset
+    const setAuditStatus = async () => {
+        try {            
+            // need to create a new PDA for the asset logs
+            const audit = await generatePDAddress();
 
-            const bank_accts = await connection.getParsedProgramAccounts(program.programId);
-            const bank_info_ctx = await connection.getParsedAccountInfo(bank);
+            const tx = await program.methods.respondAudit(assetHash, parseInt(assetStatus)).accounts({
+                audit: audit,
+                user: anchorProvider.wallet.publicKey,
+                systemProgram: web3.SystemProgram.programId,
+              }).rpc();
 
-            console.log('Withdraw all from bank @ ', PDABankPublicKey);
-            console.log('bank: ', bank);
-            console.log('bank_accts: ', bank_accts);
-            console.log('bank_info_ctx: ', bank_info_ctx);
-
-            
-            await program.rpc.withdraw(new BN(0.1 * LAMPORTS_PER_SOL), {
-                accounts: {
-                    bank: PDABankPublicKey,
-                    user: anchorProvider.wallet.publicKey
-                }
-            });
-            
-
-            console.log('Withdrew 0.1 SOL from bank @ ', PDABankPublicKey);
+            console.log('Wow! new asset pda created: ' + tx.toString());
         } catch(err) {
-            console.log('error withdrawing from bank | err: ', err);
+            console.log('error creating bank | err: ', err);
         }
+    };
+
+    // function to get asset and status
+    const getAssetLogs = async () => {
+
     };
 
     const getBanks = async () => {
@@ -137,50 +149,60 @@ export const Bank: FC = () => {
         }
     };
 
-
     return (
         <>
-            {banks.map((bank) => {
-                return (
-                    <div key={bank.pubkey} className="md:hero-content flex flex-col">
-                        <h1>{bank.name.toString()}</h1>
-                        <span>{bank.balance.toString()}</span>
-                        <div className="relative group items-center">
+            <div className="flex flex-col justify-center">
+                <>
+                <div className="relative group items-center">
+                    <div className="flex flex-row justify-center">
+                        {isOwner && <div className="relative group items-center" style={{ padding: 8 }}>
+                                <h6>Asset Status:</h6>
+                                <input type="text"
+                                    value={otherAddress}
+                                    onChange={(event) => setOtherAddress(event.target.value)} />
+                            </div>
+                        }
+                        
+                        <div className="relative group items-center" style={{ padding: 8}}>
                             <button
                                 className="group w-60 m-2 btn animate-pulse bg-gradient-to-br from-indigo-500 to-fuchsia-500 hover:from-white hover:to-purple-300 text-black"
-                                onClick={() => depositInBank(bank.pubkey)}>
-                                Deposit 0.12 SOL
-                            </button>
-                            <button
-                                className="group w-60 m-2 btn animate-pulse bg-gradient-to-br from-indigo-500 to-fuchsia-500 hover:from-white hover:to-purple-300 text-black"
-                                onClick={() => withdrawFromBank(bank.pubkey)}>
-                                Withdraw 0.1 SOL
+                                onClick={createAssetLog}>
+                                <span className="block group-disabled:hidden" > 
+                                    Create Asset
+                                </span>
                             </button>
                         </div>
-                    </div>
-                )
-            })}
+                    </div>                    
+                    
+                    <div className="flex flex-row justify-center">
 
-            <div className="flex flex-row justify-center">
-                <>
+                        <div className="relative group items-center" style={{ padding: 8}}>
+                            <h6>Asset Hash: </h6>
+                            <input type="text"
+                                value={assetHash}
+                                onChange={(e) => setAssetHash(e.target.value)} />
+                        </div>
+
+                        {isOwner && <div className="relative group items-center" style={{ padding: 8}}>
+                                <h6>Asset Status:</h6>
+                                <input type="text"
+                                    value={assetStatus}
+                                    onChange={(event) => setAssetStatus(event.target.value)} />
+                            </div>
+                        }
+
+                    </div>
+
                     <div className="relative group items-center">
-                        <div className="m-1 absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-fuchsia-500 
-                        rounded-lg blur opacity-20 group-hover:opacity-100 transition duration-1000 group-hover:duration-200 animate-tilt"></div>
                         <button
                             className="group w-60 m-2 btn animate-pulse bg-gradient-to-br from-indigo-500 to-fuchsia-500 hover:from-white hover:to-purple-300 text-black"
-                            onClick={createBank}>
+                            onClick={isOwner ? addAsset : setAuditStatus}>
                             <span className="block group-disabled:hidden" > 
-                                Create Bank
-                            </span>
-                        </button>
-                        <button
-                            className="group w-60 m-2 btn animate-pulse bg-gradient-to-br from-indigo-500 to-fuchsia-500 hover:from-white hover:to-purple-300 text-black"
-                            onClick={getBanks}>
-                            <span className="block group-disabled:hidden" > 
-                                Fetch Banks
+                                {isOwner ? 'Add Asset' : 'Log Asset'}
                             </span>
                         </button>
                     </div>
+                </div>
                 </>
             </div>
         </>
