@@ -146,7 +146,7 @@ export const Bank: FC = () => {
                 <div className="flex flex-row justify-center">
                     <div className="relative group items-center" style={{ padding: 8}}>
                         <input type="checkbox" id="horns" name="horns" checked={isAuditorRole} onChange={(e) => setIsAuditorRole(!isAuditorRole)} />
-                        <label for="horns">Please check if you are an Auditor for a Client</label>
+                        <label>Please check if you are an Auditor for a Client</label>
                     </div>
                 </div>
                 
