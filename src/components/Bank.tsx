@@ -60,8 +60,8 @@ export const Bank: FC = () => {
         const audit = await generatePDAddress();
 
         const auditPDAccount = await program.account.solAudit.fetch(audit);
-        console.log('auditPDAccount.owner: ', auditPDAccount.owner);
-        return anchorProvider.wallet.publicKey.toString() === auditPDAccount.owner.toString();
+        console.log('auditPDAccount.owner: ', auditPDAccount); //owner
+        return anchorProvider.wallet.publicKey.toString() === auditPDAccount.toString(); //owner
         } catch(err) {
             console.error(err);
             return false;
