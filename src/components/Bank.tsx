@@ -103,6 +103,7 @@ export const Bank: FC = () => {
               }).rpc();
 
             console.log('Wow! new asset in pda: ' + tx.toString());
+            setAssetHash('');
             getAuditData();
         } catch(err) {
             console.log('error creating bank | err: ', err);
@@ -110,27 +111,13 @@ export const Bank: FC = () => {
     };
 
     // function for auditor to set status of asset
-    const setAuditStatus = async () => {
-        try {            
-            // need to create a new PDA for the asset logs
-            const audit = generatePDAddress();
-
-            const tx = await program.methods.respondAudit(assetHash, parseInt(assetStatus)).accounts({
-                audit: audit,
-                user: anchorProvider.wallet.publicKey,
-                systemProgram: web3.SystemProgram.programId,
-              }).rpc();
-
-            console.log('Wow! new asset pda created: ' + tx.toString());
-        } catch(err) {
-            console.log('error creating bank | err: ', err);
-        }
-    };
-
     const setAuditStatusV2 = async (assetHash: string, assetStatus: number) => {
         try {            
             // need to create a new PDA for the asset logs
             const audit = generatePDAddress();
+
+            console.log('[setAuditStatusV2] assetHash: ', assetHash);
+            console.log('[setAuditStatusV2] assetStatus: ', assetStatus);
 
             const tx = await program.methods.respondAudit(assetHash, assetStatus).accounts({
                 audit: audit,
@@ -139,17 +126,13 @@ export const Bank: FC = () => {
               }).rpc();
 
             console.log('Wow! new asset pda created: ' + tx.toString());
-            getAuditData();
+            await new Promise(f => setTimeout(getAuditData, 1000));
         } catch(err) {
             console.log('error creating bank | err: ', err);
         }
     };
 
     // function to get asset and status
-    /*
-    const getAssetLogs = async () => {
-    };
-    */
 
     // <input for other address> | <button to create PDA> (maybe)<button to fetch pda data (assets)>
     // {for each asset}
